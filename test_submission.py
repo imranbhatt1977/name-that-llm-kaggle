@@ -1,7 +1,11 @@
 # test_submission.py
 import os
+import sys
 import pandas as pd
 import numpy as np
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 def validate_submission(submission_path='submission.parquet', test_path='test.csv', train_path='train.csv'):
     print(f"--- Validating Submission File: {submission_path} ---")
