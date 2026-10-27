@@ -17,7 +17,7 @@ from sklearn.linear_model import LogisticRegression, RidgeClassifier, SGDClassif
 from sklearn.svm import LinearSVC
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.cluster import AgglomerativeClustering
-from sklearn.metrics import accuracy_score, f1_score, adjusted_rand_score
+from sklearn.metrics import accuracy_score, balanced_accuracy_score, f1_score, adjusted_rand_score
 
 from src.features import process_dataframe_features, to_syntactic_skeleton
 
@@ -57,13 +57,13 @@ def infer_prompt_clusters(texts_arr: np.ndarray, target_size: int = 18) -> np.nd
     if n_clusters == 1:
         return np.zeros(n, dtype=int)
 
-    vec = TfidfVectorizer(ngram_range=(1, 2), stop_words="english", min_df=2, max_df=0.35, sublinear_tf=True)
+    vec = TfidfVectorizer(ngram_range=(1, 2), stop_words="english", min_df=2, max_df=0.35, max_features=25000, sublinear_tf=True)
     X_top = vec.fit_transform(texts_arr).toarray()
     X_top /= (np.linalg.norm(X_top, axis=1, keepdims=True) + 1e-12)
     sim = X_top @ X_top.T
 
     clust = AgglomerativeClustering(n_clusters=n_clusters, metric="precomputed", linkage="average")
-    labels = clust.fit_predict(1.0 - sim)
+    labels = clust.fit_predict(np.clip(1.0 - sim, 0.0, 2.0))
 
     for _ in range(5):
         counts = np.bincount(labels, minlength=n_clusters)
@@ -72,7 +72,7 @@ def infer_prompt_clusters(texts_arr: np.ndarray, target_size: int = 18) -> np.nd
             small_c = int(np.argmin(counts))
             big_idx = np.where(labels == big_c)[0]
             sub_sim = sim[np.ix_(big_idx, big_idx)]
-            sub_l = AgglomerativeClustering(n_clusters=2, metric="precomputed", linkage="average").fit_predict(1.0 - sub_sim)
+            sub_l = AgglomerativeClustering(n_clusters=2, metric="precomputed", linkage="average").fit_predict(np.clip(1.0 - sub_sim, 0.0, 2.0))
 
             small_idx = np.where(labels == small_c)[0]
             small_cent = X_top[small_idx].mean(axis=0)
@@ -94,7 +94,7 @@ def infer_prompt_clusters(texts_arr: np.ndarray, target_size: int = 18) -> np.nd
         score_mat = X_top @ centroids.T
         col_indices = np.repeat(np.arange(n_clusters), target_size)
         if len(col_indices) < n:
-            col_indices = np.concatenate([col_indices, np.arange(n - len(col_indices))])
+            col_indices = np.concatenate([col_indices, np.arange(n - len(col_indices)) % n_clusters])
         _, col_ind = linear_sum_assignment(-score_mat[:, col_indices])
         labels = col_indices[col_ind[:n]]
         for k in range(n_clusters):
@@ -305,7 +305,7 @@ def train_and_predict_multiview_ensemble(
 
         Xrel_tr = compute_cluster_relative_stylo(Xs_tr_base, p_tr)
         Xrel_va = compute_cluster_relative_stylo(Xs_va_base, va_clusters)
-        Xrel_te = compute_cluster_relative_stylo(Xs_te_base, test_clusters) if len(test_df) >= 18 else Xs_te_base
+        Xrel_te = compute_cluster_relative_stylo(Xs_te_base, test_clusters)
 
         Xs_tr_rob = np.hstack([Xs_tr_base, Xrel_tr])
         Xs_va_rob = np.hstack([Xs_va_base, Xrel_va])
@@ -471,22 +471,22 @@ def train_and_predict_multiview_ensemble(
             f"Global: {g_acc * 100:.2f}% | +Specialists: {h_acc * 100:.2f}% | +Sinkhorn: {s_acc * 100:.2f}%"
         )
 
-    global_acc = accuracy_score(y, np.argmax(oof_global, axis=1))
+    global_acc = balanced_accuracy_score(y, np.argmax(oof_global, axis=1))
     global_f1 = f1_score(y, np.argmax(oof_global, axis=1), average="macro")
 
-    hier_acc = accuracy_score(y, np.argmax(oof_refined, axis=1))
+    hier_acc = balanced_accuracy_score(y, np.argmax(oof_refined, axis=1))
     hier_f1 = f1_score(y, np.argmax(oof_refined, axis=1), average="macro")
 
-    sink_acc = accuracy_score(y, np.argmax(oof_sinkhorn, axis=1))
+    sink_acc = balanced_accuracy_score(y, np.argmax(oof_sinkhorn, axis=1))
     sink_f1 = f1_score(y, np.argmax(oof_sinkhorn, axis=1), average="macro")
 
     test_final = apply_within_cluster_sinkhorn(test_refined, test_clusters) if len(test_df) >= 18 else test_refined
 
     print("\n" + "=" * 75)
     print(f"Total 5-Fold Runtime : {time.time() - t0:.1f}s")
-    print(f"Stage 1 - 5-Fold Global Multi-View OOF        : Acc = {global_acc * 100:.2f}% | Macro-F1 = {global_f1 * 100:.2f}%")
-    print(f"Stage 2 - + Sibling Cluster Specialists       : Acc = {hier_acc * 100:.2f}% | Macro-F1 = {hier_f1 * 100:.2f}%")
-    print(f"Stage 3 - + Test-Time Prompt Cluster Sinkhorn : Acc = {sink_acc * 100:.2f}% | Macro-F1 = {sink_f1 * 100:.2f}%")
+    print(f"Stage 1 - 5-Fold Global Multi-View OOF        : BalAcc = {global_acc * 100:.2f}% | Macro-F1 = {global_f1 * 100:.2f}%")
+    print(f"Stage 2 - + Sibling Cluster Specialists       : BalAcc = {hier_acc * 100:.2f}% | Macro-F1 = {hier_f1 * 100:.2f}%")
+    print(f"Stage 3 - + Test-Time Prompt Cluster Sinkhorn : BalAcc = {sink_acc * 100:.2f}% | Macro-F1 = {sink_f1 * 100:.2f}%")
     print("=" * 75)
 
     return oof_sinkhorn, test_final
