@@ -11,13 +11,14 @@ name-that-llm-kaggle/
 │
 ├── src/                        # Core Python modules
 │   ├── __init__.py
-│   ├── dataset.py              # PyTorch Dataset for DeBERTa tokenization
+│   ├── dataset.py              # PyTorch Dataset for DeBERTa tokenization + stylometric fusion
 │   ├── features.py             # 236 stylometric, typographic & syntactic skeleton features
-│   ├── tabular_model.py        # 5-fold Multi-View Ensemble (SGD, LinearSVC, Ridge, LogReg, HistGBDT)
-│   ├── model.py                # PyTorch DeBERTa-v3 training loops, loss criteria, and validation
+│   ├── tabular_model.py        # 3-Stage Hierarchical Multi-View & Sibling Specialist Ensemble
+│   ├── model.py                # HybridLLMClassifier (DeBERTa-v3 + Stylometric MLP Fusion)
 │   └── utils.py                # Seed setting for reproducibility
 │
 ├── train.py                    # Master 5-fold training, inference & submission validation script
+├── kaggle_submission.ipynb     # Self-contained Jupyter Notebook for EDA & Kaggle submission
 ├── explore_fingerprints.py     # Statistical fingerprint analysis & multi-view CV benchmark
 ├── test_submission.py          # Automated local validation script for submission.parquet
 ├── submit.py                   # Automated Kaggle API upload script
@@ -52,17 +53,18 @@ Using **5-Fold `StratifiedGroupKFold` grouped by `prompt_id`** (preventing promp
 | Naive Baseline (Random / Majority) | `5.56%` | `5.56%` | `1.0x` |
 | Initial 12 Stylometric Features (LogReg) | `31.49%` | `30.80%` | `5.7x` |
 | Expanded 236 Stylometric Features Only (LogReg) | `35.01%` | `34.72%` | `6.3x` |
-| **Multi-View Joint Ensemble (`src/tabular_model.py`)** | **`38.76%`** | **`38.03%`** | **`7.0x`** |
+| Stage 1: Global Multi-View Joint Ensemble | `38.87%` | `38.07%` | `7.0x` |
+| **Stage 2: + Hierarchical Sibling Cluster Specialists** | **`39.27%`** | **`38.49%`** | **`7.1x`** |
 
 ---
 
 ## 🚀 Quickstart
 
 ```bash
-# 1. Run 5-fold Multi-View Ensemble training, test inference, and submission validation
+# 1. Run 5-fold Hierarchical Multi-View Ensemble training, test inference, and validation
 python train.py
 
-# 2. (Optional) Include 5-fold DeBERTa-v3 fine-tuning in the ensemble on GPU
+# 2. (Optional) Include 5-fold Hybrid DeBERTa-v3 + Stylometric Fusion on GPU
 python train.py --use-deberta
 
 # 3. Validate submission.parquet standalone
