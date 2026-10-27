@@ -13,7 +13,7 @@ name-that-llm-kaggle/
 │   ├── __init__.py
 │   ├── dataset.py              # PyTorch Dataset for DeBERTa tokenization + stylometric fusion
 │   ├── features.py             # 236 stylometric, typographic & syntactic skeleton features
-│   ├── tabular_model.py        # 3-Stage Hierarchical Multi-View & Sibling Specialist Ensemble
+│   ├── tabular_model.py        # 3-Stage Multi-View, Sibling Specialist & Prompt-Cluster Sinkhorn Pipeline
 │   ├── model.py                # HybridLLMClassifier (DeBERTa-v3 + Stylometric MLP Fusion)
 │   └── utils.py                # Seed setting for reproducibility
 │
@@ -53,8 +53,14 @@ Using **5-Fold `StratifiedGroupKFold` grouped by `prompt_id`** (preventing promp
 | Naive Baseline (Random / Majority) | `5.56%` | `5.56%` | `1.0x` |
 | Initial 12 Stylometric Features (LogReg) | `31.49%` | `30.80%` | `5.7x` |
 | Expanded 236 Stylometric Features Only (LogReg) | `35.01%` | `34.72%` | `6.3x` |
-| Stage 1: Global Multi-View Joint Ensemble | `38.87%` | `38.07%` | `7.0x` |
-| **Stage 2: + Hierarchical Sibling Cluster Specialists** | **`39.27%`** | **`38.49%`** | **`7.1x`** |
+| Stage 1: Global Multi-View + Cluster-Relative Stylo | `42.61%` | `41.84%` | `7.7x` |
+| Stage 2: + 8 Hierarchical Sibling Cluster Specialists | `43.83%` | `42.85%` | `7.9x` |
+| **Stage 3: + Unsupervised Prompt-Cluster Sinkhorn Matching** | **`48.43%`** | **`48.38%`** | **`8.7x`** |
+
+### Why Stage 3 Jumps +4.60% (to `48.43%`) Without Using `prompt_id`
+Even though `test.csv` does not provide `prompt_id`, every hidden prompt in the dataset is answered by all 18 models. Using content-word TF-IDF cosine similarity and capacity-18 linear sum assignment (`infer_prompt_clusters` in `src/tabular_model.py`), our pipeline recovers the unseen prompt groups from raw text alone with **99.35% average Adjusted Rand Index (ARI)** (`1.0000` on 4 of 5 folds). Within each inferred 18-passage prompt group, we:
+1. Standardize the 236 stylometric features relative to the prompt cluster (`compute_cluster_relative_stylo`), eliminating prompt-induced shifts in length and punctuation.
+2. Apply Sinkhorn-Knopp doubly-stochastic scaling and soft Hungarian assignment (`apply_within_cluster_sinkhorn`), enforcing mutual exclusivity across the 18 models answering the same prompt.
 
 ---
 
